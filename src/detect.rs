@@ -10,6 +10,15 @@ pub struct Detection {
     pub fields: Vec<(String, String)>,
 }
 
+fn compare_confidence(a: f64, b: f64) -> std::cmp::Ordering {
+    match (a.is_nan(), b.is_nan()) {
+        (true, true) => std::cmp::Ordering::Equal,
+        (true, false) => std::cmp::Ordering::Less,
+        (false, true) => std::cmp::Ordering::Greater,
+        (false, false) => a.total_cmp(&b),
+    }
+}
+
 /// Run all detectors against the input, returning results sorted by confidence
 pub fn run_all(input: &str) -> Vec<Detection> {
     let all_detectors: Vec<fn(&str) -> Option<Detection>> = vec![
@@ -38,8 +47,30 @@ pub fn run_all(input: &str) -> Vec<Detection> {
         .filter_map(|detector| detector(input))
         .collect();
 
-    // Sort by confidence descending
-    results.sort_by(|a, b| b.confidence.partial_cmp(&a.confidence).unwrap());
+    results.sort_by(|a, b| compare_confidence(b.confidence, a.confidence));
 
     results
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn sort_handles_non_finite_confidence_without_panic() {
+        let mut results = vec![
+            Detection {
+                label: "low".into(),
+                confidence: f64::NAN,
+                fields: vec![],
+            },
+            Detection {
+                label: "high".into(),
+                confidence: 0.9,
+                fields: vec![],
+            },
+        ];
+        results.sort_by(|a, b| compare_confidence(b.confidence, a.confidence));
+        assert_eq!(results[0].label, "high");
+    }
 }
